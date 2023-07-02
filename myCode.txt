@@ -1,0 +1,193 @@
+//express is a framework of node.js
+//it makes code syntax easy and short
+
+import express from "express";
+import mongoose from "mongoose";
+import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+
+//1.creating server using express syntax example
+const app= express(); //app is name of our server
+
+app.use(cookieParser()); //middleware for accesing cookies
+
+//5.connecting to database
+mongoose.connect("mongodb://localhost:27017/", {
+    dbName: "back",
+}).then(()=>console.log("database Connected")).catch(()=>console.log(e));
+
+//creating schema
+const UserSchema = new mongoose.Schema({
+    name: String,
+    email: String,
+    password: String,
+});
+
+//creating collection
+const User = mongoose.model("userdetail",UserSchema);
+
+
+//creating array
+//const users=[];
+
+//4.setting up view engine :to accesee ejs files of view
+app.set("views engine", "ejs")
+
+//3.creating apis
+app.get("/", (req, res)=>{
+    //res.send("hiiiii"); 
+    //res.sendStatus(404);
+    res.render("login.ejs")
+});
+
+//using middleware: this one gives req.body for use
+app.use(express.urlencoded({extended: true}));
+
+// app.post("/", async(req, res)=>{
+//     console.log(req.body);
+//     //users.push({username: req.body.name, email: req.body.email});
+//     await message.create({name: req.body.name, email: req.body.email})
+//     res.render("test.ejs");
+
+//     // you can even write like this by destucturing
+//     // const {name, email} = req.body;
+//     // await message.create({name: name, email: email})
+
+//     // and if the the name of destructuring and schema is same then you can even write it like
+//     // const {name, email} = req.body;
+//     // await message.create({name, email})
+// });
+
+
+// app.get("/users", (req, res)=>{
+//  res.json(users)
+// });
+
+// app.get("/add", async(req, res)=>{
+
+//   await message.create({name: "yadu", email: "yad@gmail.com"})
+
+// });
+
+//----authentication----
+
+app.get("/login", async(req,res)=>{
+    console.log(req.cookies.token);
+    const token = req.cookies.token;
+    //if token exist then maintain session i.e login
+    if(token){
+    //verifying the token
+        const decoded = jwt.verify(token, "sdgbdfghfbfsdg")
+        console.log(decoded);
+
+        //finding user by its id from token
+        req.user = await User.findById(decoded._id);
+        console.log(req.user);
+
+        //res.render("logout.ejs")
+        res.render("logout.ejs", {name:req.user.name})
+    }
+    else{
+        res.render("login.ejs")
+    }
+
+    // res.render("login.ejs")
+});
+
+app.post("/login", async(req,res)=>{
+
+    //putting condition for duplicate user login
+    const { name, email, password} = req.body;
+    let present = await User.findOne({email});
+    if(!present){
+       //return console.log("Register first");
+      return res.redirect("/register")
+    }
+    //here we check if entered password is correct or not
+    const isMatch = present.password === password;
+
+    if(!isMatch){
+        return res.render("login.ejs", {email, message: "Incorrect Password"});
+    }
+else{
+   // const userID = await User.create({name: req.body.name, email: req.body.email})
+
+    //we use jwt token to hide our id as it can be visible 
+    const newToken = jwt.sign({_id:present._id}, "sdgbdfghfbfsdg" ); //we create new token with our value and some secret value
+    console.log(newToken);
+
+    res.cookie("token", newToken, { //setting cookie with name, value
+       expires:new Date(Date.now()+60*1000), //cookie will expire after 60 sec means you will be logout after 60 sec as cookie maintains session ex. some app logs out after some period
+       httpOnly: true //it means only server side can access cookie
+    });
+    console.log(req.body);
+    
+    res.redirect("/login");
+}
+});
+
+app.post("/register", async(req,res)=>{
+
+    //putting condition for duplicate user login
+    const { name, email} = req.body;
+    let present1 = await User.findOne({email});
+     
+    //bcrypt is used to hide the password in database by encrypting it
+    const hashpassword = await bcrypt.hash(req.body.password,10 );
+
+    if(present1){
+       //return console.log("Register first");
+      return res.redirect("/login")
+    }
+else{
+    
+
+    const userID = await User.create({name: req.body.name, email: req.body.email, password: hashpassword})
+
+    //we use jwt token to hide our id as it can be visible 
+    const newToken = jwt.sign({_id:userID._id}, "sdgbdfghfbfsdg" ); //we create new token with our value and some secret value
+    console.log(newToken);
+
+    res.cookie("token", newToken, { //setting cookie with name, value
+       expires:new Date(Date.now()+60*1000), //cookie will expire after 60 sec means you will be logout after 60 sec as cookie maintains session ex. some app logs out after some period
+       httpOnly: true //it means only server side can access cookie
+    });
+    console.log(req.body);
+    
+    res.redirect("/");
+}
+});
+
+app.get("/logout", (req,res)=>{
+    res.cookie("token", null, {
+        expires:new Date(Date.now()),
+        httpOnly: true
+    });
+    res.redirect("/login")
+});
+
+app.get("/register", (req, res)=>{
+    res.render("register.ejs");
+})
+
+
+
+// //accesing static file: must put that in public folder
+// import path from "path"; //use for path finding
+// //path.resolve() : gives cureent directory location
+// app.use(express.static(path.join(path.resolve(), "public")));
+
+// app.get("/about", (req, res)=>{
+//     //res.send("hiiiii"); 
+//     //res.sendStatus(404);
+//     res.sendFile("index.html" )
+// });
+
+
+
+
+//2.listening server
+app.listen(3000, ()=>{
+    console.log("express server running")
+})
